@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
-interface Props { id: string; onBack: () => void; }
+interface Props { id: string; scenario: string; onBack: () => void; }
 interface Stats { [key: string]: number; strength: number; dexterity: number; constitution: number; intelligence: number; wisdom: number; charisma: number; }
 export interface GameChar { name: string; hp: number; maxHp: number; san: number; maxSan: number; stats: Stats; items: string[]; skills: Record<string, number>; }
 interface Msg { role: 'gm' | 'player' | 'system'; text: string; }
@@ -20,7 +20,8 @@ const loadChar = (): GameChar => {
   return { name: '調查員', hp: 10, maxHp: 10, san: 65, maxSan: 99, stats: { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 }, items: ['手電筒', '筆記本', '鋼筆'], skills: { ...COC_SKILLS } };
 };
 
-const OPENING = `🐙 **克蘇魯的呼喚**
+const OPENINGS: Record<string, string> = {
+  coc: `🐙 **克蘇魯的呼喚**
 
 1925年，美國麻薩諸塞州，阿卡姆鎮。
 
@@ -34,7 +35,26 @@ const OPENING = `🐙 **克蘇魯的呼喚**
 
 空氣中瀰漫著一股奇異的腥味。
 
-**你想做什麼？**`;
+**你想做什麼？**`,
+
+  kaidan: `👻 **都市怪談 — 消えない着信**
+
+現代，東京都，深夜 2:37。
+
+你是一名大學生，住在高圓寺的老舊公寓裡。三天前，你的室友——佐藤美咲——突然失蹤了。她最後的訊息是一張模糊的照片：一面牆上寫滿了紅色的字，配上一句「不要接那通電話」。
+
+警察說她只是離家出走，但你知道不對勁。美咲的房間裡，手機還留在桌上，螢幕碎了一角。奇怪的是，那支手機每天凌晨 2:37 都會響起——來電顯示是美咲自己的號碼。
+
+今晚，你決定留在她的房間等那通電話。
+
+房間很小，窗簾拉得緊緊的。美咲的書桌上散落著課本和一本黑色封面的日記。牆角的衣櫃門微微開著，裡面黑漆漆的。床頭的鬧鐘顯示 2:35。
+
+還有兩分鐘。
+
+空氣突然變得很冷，你的呼吸凝成了白霧。
+
+**你想做什麼？**`,
+};
 
 function parseGmTags(text: string, char: GameChar, setChar: (fn: (c: GameChar) => GameChar) => void): { clean: string; systemMsgs: string[] } {
   const systemMsgs: string[] = [];
@@ -108,14 +128,14 @@ function parseGmTags(text: string, char: GameChar, setChar: (fn: (c: GameChar) =
   return { clean: clean.trim(), systemMsgs };
 }
 
-export default function Game({ id, onBack }: Props) {
+export default function Game({ id, scenario, onBack }: Props) {
   const [char, setChar] = useState<GameChar>(loadChar);
-  const [messages, setMessages] = useState<Msg[]>([{ role: 'gm', text: OPENING }]);
+  const opening = OPENINGS[scenario] || OPENINGS.coc;
+  const [messages, setMessages] = useState<Msg[]>([{ role: 'gm', text: opening }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  // Keep conversation history for API
-  const apiHistory = useRef<Array<{role: string; text: string}>>([{ role: 'gm', text: OPENING }]);
+  const apiHistory = useRef<Array<{role: string; text: string}>>([{ role: 'gm', text: opening }]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
@@ -131,7 +151,7 @@ export default function Game({ id, onBack }: Props) {
       const res = await fetch((import.meta.env.VITE_SERVER_URL || 'https://flatness-multiply-hatchback.ngrok-free.dev') + '/api/gm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiHistory.current }),
+        body: JSON.stringify({ messages: apiHistory.current, scenario }),
       });
       const data = await res.json();
       const rawReply = data.reply || 'GM 沉默了...';
@@ -156,7 +176,7 @@ export default function Game({ id, onBack }: Props) {
   return (
     <div className="container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0' }}>
-        <h2>🐙 克蘇魯的呼喚</h2>
+        <h2>{scenario === 'kaidan' ? '👻 都市怪談' : '🐙 克蘇魯的呼喚'}</h2>
         <button onClick={onBack} style={{ background: 'var(--bg-card)' }}>← 返回</button>
       </header>
       <div className="game-layout">
