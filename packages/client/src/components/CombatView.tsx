@@ -1,4 +1,4 @@
-import type { CombatState } from '@trpg/shared';
+interface CombatState { turnOrder: string[]; currentTurnIndex: number; round: number; }
 
 const placeholder: CombatState = { turnOrder: [], currentTurnIndex: 0, round: 0 };
 

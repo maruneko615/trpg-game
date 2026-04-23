@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
-export default function Home() {
-  const navigate = useNavigate();
+interface Props {
+  onNavigate: (page: string, id?: string) => void;
+}
+
+export default function Home({ onNavigate }: Props) {
   const [joinCode, setJoinCode] = useState('');
 
-  const handleCreate = () => navigate(`/game/${crypto.randomUUID().slice(0, 8)}`);
-  const handleJoin = () => { if (joinCode.trim()) navigate(`/game/${joinCode.trim()}`); };
+  const handleCreate = () => onNavigate('game', crypto.randomUUID().slice(0, 8));
+  const handleJoin = () => { if (joinCode.trim()) onNavigate('game', joinCode.trim()); };
 
   return (
     <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', gap: '2rem' }}>
@@ -16,7 +18,7 @@ export default function Home() {
         <input placeholder="輸入遊戲代碼" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleJoin()} />
         <button onClick={handleJoin}>加入遊戲</button>
       </div>
-      <button onClick={() => navigate('/character/create')} style={{ background: 'var(--bg-card)' }}>建立角色</button>
+      <button onClick={() => onNavigate('character')} style={{ background: 'var(--bg-card)' }}>建立角色</button>
     </div>
   );
 }

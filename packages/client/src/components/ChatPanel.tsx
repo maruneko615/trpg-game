@@ -1,36 +1,19 @@
-import { useState } from 'react';
-import type { ChatMessage } from '@trpg/shared';
+import { useEffect, useRef } from 'react';
 
-export default function ChatPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
+interface Props { log: string[]; }
 
-  const send = () => {
-    if (!input.trim()) return;
-    const msg: ChatMessage = {
-      id: crypto.randomUUID().slice(0, 8),
-      sender: '你',
-      content: input,
-      type: 'chat',
-      timestamp: Date.now(),
-    };
-    setMessages((prev) => [...prev, msg]);
-    setInput('');
-  };
+export default function AdventureLog({ log }: Props) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [log]);
 
   return (
     <div style={{ background: 'var(--bg-secondary)', borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', height: 250 }}>
-      <h3>💬 聊天</h3>
+      <h3>📖 冒險日誌</h3>
       <div style={{ flex: 1, overflowY: 'auto', marginTop: '0.5rem' }}>
-        {messages.map((m) => (
-          <p key={m.id} style={{ fontSize: '0.9rem', marginBottom: '0.3rem' }}>
-            <strong>{m.sender}:</strong> {m.content}
-          </p>
+        {log.map((msg, i) => (
+          <p key={i} style={{ fontSize: '0.85rem', marginBottom: '0.3rem', color: msg.includes('✅') ? '#4ade80' : msg.includes('❌') ? '#f87171' : 'var(--text-primary)' }}>{msg}</p>
         ))}
-      </div>
-      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
-        <input style={{ flex: 1 }} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="輸入訊息..." />
-        <button onClick={send}>送出</button>
+        <div ref={bottomRef} />
       </div>
     </div>
   );

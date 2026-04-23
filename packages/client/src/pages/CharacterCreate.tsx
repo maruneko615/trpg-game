@@ -1,38 +1,36 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { Stats, Character } from '@trpg/shared';
-import { DEFAULT_STATS, BASE_HP, HP_PER_LEVEL, BASE_MP, MP_PER_LEVEL, MIN_STAT, MAX_STAT } from '@trpg/shared';
+
+interface Stats {
+  strength: number; dexterity: number; constitution: number;
+  intelligence: number; wisdom: number; charisma: number;
+}
+
+const DEFAULT_STATS: Stats = {
+  strength: 10, dexterity: 10, constitution: 10,
+  intelligence: 10, wisdom: 10, charisma: 10,
+};
 
 const LABELS: Record<keyof Stats, string> = {
   strength: 'STR', dexterity: 'DEX', constitution: 'CON',
   intelligence: 'INT', wisdom: 'WIS', charisma: 'CHA',
 };
 
-export default function CharacterCreate() {
-  const navigate = useNavigate();
+interface Props { onBack: () => void; }
+
+export default function CharacterCreate({ onBack }: Props) {
   const [name, setName] = useState('');
   const [stats, setStats] = useState<Stats>({ ...DEFAULT_STATS });
 
   const update = (key: keyof Stats, delta: number) => {
-    setStats((prev) => ({ ...prev, [key]: Math.max(MIN_STAT, Math.min(MAX_STAT, prev[key] + delta)) }));
+    setStats((prev) => ({ ...prev, [key]: Math.max(3, Math.min(20, prev[key] + delta)) }));
   };
 
   const handleSubmit = () => {
-    const character: Character = {
-      id: crypto.randomUUID().slice(0, 8),
-      name,
-      level: 1,
-      experience: 0,
-      stats,
-      hp: BASE_HP + Math.floor((stats.constitution - 10) / 2),
-      maxHp: BASE_HP + Math.floor((stats.constitution - 10) / 2),
-      mp: BASE_MP + Math.floor((stats.intelligence - 10) / 2),
-      maxMp: BASE_MP + Math.floor((stats.intelligence - 10) / 2),
-      skills: [],
-      inventory: [],
-    };
+    const hp = 10 + Math.floor((stats.constitution - 10) / 2);
+    const mp = 5 + Math.floor((stats.intelligence - 10) / 2);
+    const character = { id: crypto.randomUUID().slice(0, 8), name, level: 1, experience: 0, stats, hp, maxHp: hp, mp, maxMp: mp, skills: [], inventory: [] };
     localStorage.setItem('trpg-character', JSON.stringify(character));
-    navigate('/');
+    onBack();
   };
 
   return (
@@ -49,6 +47,7 @@ export default function CharacterCreate() {
           </div>
         ))}
         <button onClick={handleSubmit} disabled={!name.trim()}>建立角色</button>
+        <button onClick={onBack} style={{ background: 'var(--bg-card)' }}>← 返回</button>
       </div>
     </div>
   );

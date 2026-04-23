@@ -1,93 +1,102 @@
 import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
 import cors from 'cors';
-import { v4 as uuid } from 'uuid';
-import { DiceType, ChatMessage, SOCKET_EVENTS } from '@trpg/shared';
-import { rollDice } from './game/dice';
-import { createCharacter, getCharacter } from './game/character';
-import { createSession, getSession, joinSession, leaveSession } from './game/session';
-import { rollInitiative, nextTurn, resolveCombatAction, CombatActionInput } from './game/combat';
+import { execFile } from 'child_process';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const SYSTEM_PROMPT = `你是一個克蘇魯的呼喚（Call of Cthulhu）TRPG 的 GM（守密人）。
 
-// --- REST API ---
+規則：
+- 使用繁體中文
+- 以第二人稱描述場景
+- 營造恐怖、懸疑、不安的洛夫克拉夫特風格氛圍
+- 當玩家行動需要技能檢定時，在回應最後加上 [ROLL:技能名:難度]，例如 [ROLL:偵查:普通]
+- 可用技能：偵查、圖書館、聆聽、閃避、說服、心理學、急救、神秘學、撬鎖、潛行、格鬥、射擊
+- 難度：普通、困難、極難
+- 看到恐怖事物加 [SAN:數值]，例如 [SAN:1]
+- 受傷加 [DMG:數值]
+- 獲得物品加 [ITEM:物品名]
+- 獲得線索加 [CLUE:線索]
+- 每次結尾問「你想做什麼？」
+- 控制在200字以內，不替玩家做決定
+- 只回覆GM的敘述文字，不要使用任何工具
 
-app.post('/api/sessions', (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: 'name required' });
-  res.json(createSession(name));
-});
+背景：1925年阿卡姆鎮，玩家是私家偵探，調查教授亨利·阿米蒂奇失蹤案。`;
 
-app.get('/api/sessions/:id', (req, res) => {
-  const session = getSession(req.params.id);
-  if (!session) return res.status(404).json({ error: 'session not found' });
-  res.json(session);
-});
+function callKiro(messages: Array<{role: string; text: string}>): Promise<string> {
+  return new Promise((resolve) => {
+    const conversation = messages.map(m =>
+      m.role === 'player' ? `[玩家]: ${m.text}` : `[GM]: ${m.text}`
+    ).join('\n');
 
-app.post('/api/characters', (req, res) => {
-  const { name, stats } = req.body;
-  if (!name) return res.status(400).json({ error: 'name required' });
-  res.json(createCharacter(name, stats));
-});
+    const prompt = `${SYSTEM_PROMPT}\n\n以下是目前的對話記錄：\n${conversation}\n\n請以GM身份回應玩家最後的行動。只回覆GM的敘述文字。`;
 
-app.get('/api/characters/:id', (req, res) => {
-  const char = getCharacter(req.params.id);
-  if (!char) return res.status(404).json({ error: 'character not found' });
-  res.json(char);
-});
+    execFile('kiro-cli', ['chat', '--no-interactive', '--wrap', 'never', '--trust-tools=', prompt], {
+      timeout: 60000,
+      maxBuffer: 1024 * 1024,
+    }, (error, stdout, stderr) => {
+      if (error) {
+        console.log(`[Kiro] Error: ${error.message}`);
+        resolve('（GM 暫時無法回應，請再試一次）');
+        return;
+      }
 
-// --- WebSocket Events ---
+      // Clean ANSI codes and extract the actual response
+      const clean = stdout
+        .replace(/\x1b\[[0-9;]*m/g, '')
+        .replace(/\x1b\[\?[0-9]*[hl]/g, '')
+        .replace(/\x1b\[[\d]*G/g, '')
+        .split('\n')
+        .filter(line => {
+          const trimmed = line.trim();
+          return trimmed.length > 0
+            && !trimmed.includes('tools are now')
+            && !trimmed.includes('Learn more')
+            && !trimmed.includes('kiro.dev')
+            && !trimmed.includes('Time:')
+            && !trimmed.includes('▸')
+            && !trimmed.includes('WARNING')
+            && !trimmed.startsWith('>')
+            && !trimmed.includes('Agents can sometimes');
+        })
+        .join('\n')
+        .trim();
 
-io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+      // Also try to get text after '>' marker
+      const lines = stdout.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9]*[hl]/g, '').replace(/\x1b\[[\d]*G/g, '').split('\n');
+      let response = '';
+      let capture = false;
+      for (const line of lines) {
+        const t = line.trim();
+        if (t.startsWith('> ')) {
+          capture = true;
+          response += t.substring(2) + '\n';
+        } else if (capture && t.length > 0 && !t.includes('Time:') && !t.includes('▸')) {
+          response += t + '\n';
+        }
+      }
 
-  socket.on(SOCKET_EVENTS.JOIN_SESSION, ({ sessionId, characterId }: { sessionId: string; characterId: string }) => {
-    const char = getCharacter(characterId);
-    if (!char) return socket.emit(SOCKET_EVENTS.ERROR, { message: 'Character not found' });
-    const session = joinSession(sessionId, char);
-    if (!session) return socket.emit(SOCKET_EVENTS.ERROR, { message: 'Cannot join session' });
-    socket.join(sessionId);
-    io.to(sessionId).emit(SOCKET_EVENTS.PLAYER_JOINED, { character: char, session });
+      const result = (response.trim() || clean || '（GM 思考中...請再試一次）');
+      console.log(`[Kiro] Response: ${result.substring(0, 100)}...`);
+      resolve(result);
+    });
   });
+}
 
-  socket.on(SOCKET_EVENTS.LEAVE_SESSION, ({ sessionId, characterId }: { sessionId: string; characterId: string }) => {
-    const session = leaveSession(sessionId, characterId);
-    if (!session) return socket.emit(SOCKET_EVENTS.ERROR, { message: 'Cannot leave session' });
-    socket.leave(sessionId);
-    io.to(sessionId).emit(SOCKET_EVENTS.PLAYER_LEFT, { characterId, session });
-  });
-
-  socket.on(SOCKET_EVENTS.ROLL_DICE, ({ sessionId, die, count, modifier }: { sessionId: string; die: DiceType; count?: number; modifier?: number }) => {
-    const result = rollDice(die, count, modifier);
-    io.to(sessionId).emit(SOCKET_EVENTS.DICE_RESULT, { playerId: socket.id, result });
-  });
-
-  socket.on(SOCKET_EVENTS.CHAT_MESSAGE, ({ sessionId, sender, content }: { sessionId: string; sender: string; content: string }) => {
-    const msg: ChatMessage = { id: uuid(), sender, content, timestamp: Date.now(), type: 'chat' };
-    io.to(sessionId).emit(SOCKET_EVENTS.CHAT_MESSAGE, msg);
-  });
-
-  socket.on(SOCKET_EVENTS.COMBAT_ACTION, ({ sessionId, action }: { sessionId: string; action: CombatActionInput }) => {
-    const session = getSession(sessionId);
-    if (!session || session.state !== 'combat') return socket.emit(SOCKET_EVENTS.ERROR, { message: 'No active combat' });
-    const result = resolveCombatAction(action);
-    io.to(sessionId).emit(SOCKET_EVENTS.COMBAT_UPDATE, { action, result });
-  });
-
-  socket.on(SOCKET_EVENTS.SCENE_UPDATE, ({ sessionId, scene }: { sessionId: string; scene: unknown }) => {
-    io.to(sessionId).emit(SOCKET_EVENTS.SCENE_UPDATE, { scene });
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
-  });
+app.post('/api/gm', async (req, res) => {
+  try {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages required' });
+    console.log(`[GM] Request with ${messages.length} messages`);
+    const reply = await callKiro(messages);
+    res.json({ reply });
+  } catch (e: any) {
+    console.log(`[GM] Error:`, e.message);
+    res.status(500).json({ error: e.message || 'GM error' });
+  }
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`TRPG server listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`TRPG server (Kiro GM) listening on port ${PORT}`));
