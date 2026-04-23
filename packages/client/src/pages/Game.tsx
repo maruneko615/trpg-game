@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 
 interface Props { id: string; onBack: () => void; }
-interface Stats { strength: number; dexterity: number; constitution: number; intelligence: number; wisdom: number; charisma: number; }
-interface GameChar { name: string; hp: number; maxHp: number; san: number; maxSan: number; stats: Stats; items: string[]; skills: Record<string, number>; }
+interface Stats { [key: string]: number; strength: number; dexterity: number; constitution: number; intelligence: number; wisdom: number; charisma: number; }
+export interface GameChar { name: string; hp: number; maxHp: number; san: number; maxSan: number; stats: Stats; items: string[]; skills: Record<string, number>; }
 interface Msg { role: 'gm' | 'player' | 'system'; text: string; }
 
 const COC_SKILLS: Record<string, number> = { '偵查': 25, '圖書館': 20, '聆聽': 20, '閃避': 20, '說服': 10, '心理學': 10, '急救': 30, '神秘學': 5, '撬鎖': 1, '潛行': 20, '攀爬': 20, '游泳': 20, '格鬥': 25, '射擊': 20 };
@@ -128,7 +128,7 @@ export default function Game({ id, onBack }: Props) {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:3001/api/gm', {
+      const res = await fetch((import.meta.env.VITE_SERVER_URL || 'https://flatness-multiply-hatchback.ngrok-free.dev') + '/api/gm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: apiHistory.current }),
