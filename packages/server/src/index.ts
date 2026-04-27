@@ -3,6 +3,9 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { execFile } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 const app = express();
 app.use(cors());
@@ -55,10 +58,15 @@ interface Room {
 
 const rooms = new Map<string, Room>();
 
+const CLEAN_KIRO_HOME = path.join(os.tmpdir(), 'trpg-kiro-clean', '.kiro');
+fs.mkdirSync(path.join(CLEAN_KIRO_HOME, 'settings'), { recursive: true });
+fs.writeFileSync(path.join(CLEAN_KIRO_HOME, 'settings', 'cli.json'), '{}', { flag: 'w' });
+
 function callKiro(prompt: string): Promise<string> {
   return new Promise((resolve) => {
+    const env = { ...process.env, KIRO_HOME: CLEAN_KIRO_HOME };
     execFile('kiro-cli', ['chat', '--no-interactive', '--wrap', 'never', '--trust-tools=', prompt], {
-      timeout: 60000, maxBuffer: 1024 * 1024,
+      timeout: 60000, maxBuffer: 1024 * 1024, env,
     }, (error, stdout) => {
       if (error) { resolve('（GM 暫時無法回應，請再試一次）'); return; }
       const lines = stdout.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[\?[0-9]*[hl]/g, '').replace(/\x1b\[[\d]*G/g, '').split('\n');

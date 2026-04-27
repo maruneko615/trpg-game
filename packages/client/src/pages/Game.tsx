@@ -91,7 +91,7 @@ export default function Game({ id, scenario, onBack }: Props) {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   useEffect(() => {
-    const socket = io(SERVER);
+    const socket = io(SERVER, { extraHeaders: { 'ngrok-skip-browser-warning': '1' } });
     socketRef.current = socket;
 
     socket.on('connect', () => {
